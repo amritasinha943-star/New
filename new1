@@ -1,0 +1,362 @@
+!pip install pandas scikit-learn torch
+import pandas as pd
+import numpy as np
+import torch
+sample dataset
+0	0x5de5791257e46f224b6fc38ebf238547508b9747f821...	5289008	1521546203	0xa0a125a828bfa2e19bd6bd2c0d869955b10b16ab	0x903bb9cd3a276d8f18fa6efed49b9bc52ccf06e5	0.0	NaN	0xa9059cbb000000000000000000000000804720ae21aa...	1
+1	0x8ccdf9fcb8b26f588b7616598076f222c0798907d684...	6095993	1533520447	0xc2d7cf95645d33006175b78989035c7c9061d3f9	0x620bd252316aa71fc3f898e1d959fe5dd8d66110	0.0	NaN	0xa9059cbb000000000000000000000000957cd4ff9b38...	1
+2	0xfbbfec12b4442469e6f7064a708c15573af477692813...	6210921	1535199094	0xc2d7cf95645d33006175b78989035c7c9061d3f9	0x620bd252316aa71fc3f898e1d959fe5dd8d66110	0.0	NaN	0xa9059cbb000000000000000000000000957cd4ff9b38...	1
+3	0xe5614f3c79ab9d54de6b09ef6bb2630f253bf751f5a7...	5360795	1522583766	0xafae4b19eff4645112ba55452f56137707166843	0xe8868e87aaa4a0d0751691f9f33b0e5da7127039	0.0	NaN	0x	1
+4	0x95725a5cec3aa7a237849c7b2b310a4a7d48a410e8f4...	6101121	1533594904	0xc2d7cf95645d33006175b78989035c7c9061d3f9	0x0e69d0a2bbb30abcb7e5cfea0e4fde19c00a8d47	0.0	NaN	0xa9059cbb000000000000000000000000957cd4ff9b38...	1
+
+%%writefile model.py
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class PhishingModel(nn.Module):
+    def __init__(self, num_from, num_to, num_contract,
+                 emb_dim=32, hidden_dim=128, dropout=0.3, extra_numeric=1):
+        super().__init__()
+
+        self.emb_from = nn.Embedding(num_from, emb_dim)
+        self.emb_to = nn.Embedding(num_to, emb_dim)
+        self.emb_contract = nn.Embedding(num_contract, emb_dim)
+
+        input_dim = emb_dim*3 + 1 + extra_numeric
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
+
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.bn2 = nn.BatchNorm1d(hidden_dim)
+
+        self.fc3 = nn.Linear(hidden_dim, hidden_dim//2)
+        self.bn3 = nn.BatchNorm1d(hidden_dim//2)
+
+        self.out = nn.Linear(hidden_dim//2, 1)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        f = x[:,0].long()
+        t = x[:,1].long()
+        c = x[:,2].long()
+        v = x[:,3].unsqueeze(1)
+        extra = x[:,4:] if x.shape[1] > 4 else None
+
+        ef = self.emb_from(f)
+        et = self.emb_to(t)
+        ec = self.emb_contract(c)
+
+        feat = torch.cat([ef, et, ec, v], dim=1)
+        if extra is not None:
+            feat = torch.cat([feat, extra], dim=1)
+
+        h = torch.relu(self.bn1(self.fc1(feat)))
+        h = self.dropout(h)
+
+        h = torch.relu(self.bn2(self.fc2(h)))
+        h = self.dropout(h)
+
+        h = torch.relu(self.bn3(self.fc3(h)))
+        h = self.dropout(h)
+
+        return self.out(h)
+
+
+
+%%writefile train.py
+#train.py
+import argparse
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_auc_score, average_precision_score
+)
+from model import PhishingModel
+import pickle
+
+# ---------------------------
+# Safe Label Encoder
+# ---------------------------
+class SafeLabelEncoder(LabelEncoder):
+    def transform(self, y):
+        y_safe = [v if v in self.classes_ else "<UNK>" for v in y]
+        return super().transform(y_safe)
+
+
+# ---------------------------
+# Dataset
+# ---------------------------
+class PhishingDataset(Dataset):
+    def __init__(self, df,
+                 le_from=None,
+                 le_to=None,
+                 le_contract=None,
+                 scaler=None,
+                 fit=True):
+        self.df = df.copy()
+        self.df['ContractAddress'] = self.df['ContractAddress'].fillna("None")
+        self.df['Value'] = self.df['Value'].astype(float)
+        self.df['InputLength'] = self.df['Input'].fillna("").apply(len)
+
+        if fit:
+            self.le_from = SafeLabelEncoder()
+            self.le_from.fit(list(self.df['From']) + ["<UNK>"])
+            self.le_to = SafeLabelEncoder()
+            self.le_to.fit(list(self.df['To']) + ["<UNK>"])
+            self.le_contract = SafeLabelEncoder()
+            self.le_contract.fit(list(self.df['ContractAddress']) + ["<UNK>"])
+            self.scaler = StandardScaler()
+            self.scaler.fit(self.df[['Value', 'InputLength']])
+        else:
+            self.le_from = le_from
+            self.le_to = le_to
+            self.le_contract = le_contract
+            self.scaler = scaler
+
+        # Transform features
+        self.df['From'] = self.le_from.transform(self.df['From'])
+        self.df['To'] = self.le_to.transform(self.df['To'])
+        self.df['ContractAddress'] = self.le_contract.transform(self.df['ContractAddress'])
+        self.df[['Value', 'InputLength']] = self.scaler.transform(self.df[['Value', 'InputLength']])
+
+        # Store labels
+        self.labels = torch.tensor(self.df['Class'].values, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        features = torch.tensor([
+            row['From'], row['To'], row['ContractAddress'],
+            row['Value'], row['InputLength']
+        ], dtype=torch.float32)
+        return features, self.labels[idx]
+
+
+# ---------------------------
+# Evaluation
+# ---------------------------
+def evaluate(model, loader, device, threshold=0.5):
+    model.eval()
+    all_logits, all_labels = [], []
+
+    with torch.no_grad():
+        for feats, labels in loader:
+            feats = feats.to(device)
+            logits = model(feats)
+            all_logits.append(logits.cpu())
+            all_labels.append(labels.unsqueeze(1))
+
+    logits = torch.cat(all_logits)
+    labels = torch.cat(all_labels)
+    probs = torch.sigmoid(logits)  # stable
+
+    preds = (probs >= threshold).int().numpy()
+    labels_np = labels.numpy().flatten()
+    probs_np = probs.numpy().flatten()
+
+    return {
+        "acc": accuracy_score(labels_np, preds),
+        "prec": precision_score(labels_np, preds),
+        "recall": recall_score(labels_np, preds),
+        "f1": f1_score(labels_np, preds),
+        "roc_auc": roc_auc_score(labels_np, probs_np),
+        "pr_auc": average_precision_score(labels_np, probs_np)
+    }
+
+
+# ---------------------------
+# Find best threshold
+# ---------------------------
+def best_threshold(model, loader, device):
+    model.eval()
+    all_logits, all_labels = [], []
+    with torch.no_grad():
+        for feats, labels in loader:
+            feats = feats.to(device)
+            logits = model(feats)
+            all_logits.append(logits.cpu())
+            all_labels.append(labels.unsqueeze(1))
+
+    logits = torch.cat(all_logits)
+    labels = torch.cat(all_labels)
+    probs = torch.sigmoid(logits)
+
+    best_f1 = 0
+    best_thresh = 0.5
+    labels_np = labels.numpy().flatten()
+    probs_np = probs.numpy().flatten()
+
+    for t in np.arange(0.1, 0.9, 0.01):
+        preds = (probs_np >= t).astype(int)
+        f1 = f1_score(labels_np, preds)
+        if f1 > best_f1:
+            best_f1 = f1
+            best_thresh = t
+    print("Best threshold found:", best_thresh, "F1:", best_f1)
+    return best_thresh
+
+
+# ---------------------------
+# Training
+# ---------------------------
+def main(args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    df = pd.read_csv(args.data_root)
+
+    train_df, val_df = train_test_split(df, test_size=0.2,
+                                        stratify=df['Class'],
+                                        random_state=42)
+
+    train_set = PhishingDataset(train_df, fit=True)
+    val_set = PhishingDataset(val_df,
+                              le_from=train_set.le_from,
+                              le_to=train_set.le_to,
+                              le_contract=train_set.le_contract,
+                              scaler=train_set.scaler,
+                              fit=False)
+
+    loader_train = DataLoader(train_set, batch_size=64, shuffle=True)
+    loader_val = DataLoader(val_set, batch_size=64)
+
+    model = PhishingModel(
+        num_from=len(train_set.le_from.classes_),
+        num_to=len(train_set.le_to.classes_),
+        num_contract=len(train_set.le_contract.classes_),
+        extra_numeric=1  # InputLength
+    ).to(device)
+
+    pos_weight = torch.tensor([
+        len(train_df[train_df['Class'] == 0]) /
+        max(1, len(train_df[train_df['Class'] == 1]))
+    ]).to(device)
+
+    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           mode='max',
+                                                           patience=3,
+                                                           factor=0.5)
+
+    best_pr_auc = 0
+    early_stop = 0
+
+    for epoch in range(50):
+        model.train()
+        total_loss = 0
+        for feats, labels in loader_train:
+            feats, labels = feats.to(device), labels.to(device).unsqueeze(1)
+            optimizer.zero_grad()
+            logits = model(feats)
+            loss = criterion(logits, labels)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+
+        val_metrics = evaluate(model, loader_val, device)
+        scheduler.step(val_metrics['pr_auc'])
+
+        print(f"[{epoch+1:03d}] loss={total_loss/len(loader_train):.4f} "
+              f"val_acc={val_metrics['acc']:.4f} "
+              f"val_f1={val_metrics['f1']:.4f} "
+              f"val_pr_auc={val_metrics['pr_auc']:.4f}")
+
+        if val_metrics['pr_auc'] > best_pr_auc:
+            best_pr_auc = val_metrics['pr_auc']
+            torch.save(model.state_dict(), f"{args.run_name}_best_model.pth")
+            early_stop = 0
+        else:
+            early_stop += 1
+            if early_stop >= 5:
+                print("Early stopping triggered.")
+                break
+
+    # Load best model
+    model.load_state_dict(torch.load(f"{args.run_name}_best_model.pth"))
+
+    # Save encoders and scaler
+    with open(f"{args.run_name}_encoders.pkl", "wb") as f:
+        pickle.dump({
+            "le_from": train_set.le_from,
+            "le_to": train_set.le_to,
+            "le_contract": train_set.le_contract,
+            "scaler": train_set.scaler
+        }, f)
+
+    # Find best threshold
+    threshold = best_threshold(model, loader_val, device)
+
+    # Final evaluation
+    final_metrics = evaluate(model, loader_val, device, threshold=threshold)
+    print("\nFinal Results (optimized threshold):")
+    print(final_metrics)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_root", type=str, required=True)
+    parser.add_argument("--run_name", type=str, default="run")
+    args = parser.parse_args()
+    main(args)
+!python train.py --data_root dataset.csv
+
+
+[001] loss=0.3223 val_acc=0.8888 val_f1=0.8934 val_pr_auc=0.9637
+[002] loss=0.2424 val_acc=0.8946 val_f1=0.9014 val_pr_auc=0.9702
+[003] loss=0.2130 val_acc=0.8969 val_f1=0.9048 val_pr_auc=0.9748
+[004] loss=0.1940 val_acc=0.9122 val_f1=0.9172 val_pr_auc=0.9782
+[005] loss=0.1774 val_acc=0.9193 val_f1=0.9235 val_pr_auc=0.9832
+[006] loss=0.1637 val_acc=0.9202 val_f1=0.9249 val_pr_auc=0.9828
+[007] loss=0.1498 val_acc=0.9038 val_f1=0.9118 val_pr_auc=0.9798
+[008] loss=0.1402 val_acc=0.9097 val_f1=0.9168 val_pr_auc=0.9817
+[009] loss=0.1312 val_acc=0.9215 val_f1=0.9263 val_pr_auc=0.9852
+[010] loss=0.1227 val_acc=0.9176 val_f1=0.9232 val_pr_auc=0.9832
+[011] loss=0.1163 val_acc=0.9348 val_f1=0.9383 val_pr_auc=0.9870
+[012] loss=0.1125 val_acc=0.9432 val_f1=0.9456 val_pr_auc=0.9886
+[013] loss=0.1092 val_acc=0.9325 val_f1=0.9360 val_pr_auc=0.9868
+[014] loss=0.1016 val_acc=0.9439 val_f1=0.9465 val_pr_auc=0.9888
+[015] loss=0.1002 val_acc=0.9319 val_f1=0.9359 val_pr_auc=0.9879
+[016] loss=0.0959 val_acc=0.9032 val_f1=0.9116 val_pr_auc=0.9807
+[017] loss=0.0942 val_acc=0.9330 val_f1=0.9367 val_pr_auc=0.9885
+[018] loss=0.0940 val_acc=0.9510 val_f1=0.9529 val_pr_auc=0.9891
+[019] loss=0.0902 val_acc=0.9518 val_f1=0.9537 val_pr_auc=0.9899
+[020] loss=0.0903 val_acc=0.9552 val_f1=0.9569 val_pr_auc=0.9909
+[021] loss=0.0883 val_acc=0.9364 val_f1=0.9399 val_pr_auc=0.9887
+[022] loss=0.0867 val_acc=0.9475 val_f1=0.9499 val_pr_auc=0.9893
+[023] loss=0.0851 val_acc=0.9324 val_f1=0.9364 val_pr_auc=0.9857
+[024] loss=0.0859 val_acc=0.9218 val_f1=0.9272 val_pr_auc=0.9843
+[025] loss=0.0818 val_acc=0.9264 val_f1=0.9312 val_pr_auc=0.9843
+Early stopping triggered.
+Best threshold found: 0.5999999999999998 F1: 0.9577736979418301
+
+Final Results (optimized threshold):
+{'acc': 0.9563, 'prec': 0.9265283230510376, 'recall': 0.9912, 'f1': 0.9577736979418301, 'roc_auc': np.float64(0.99148246), 'pr_auc': np.float64(0.9909010008241327)}
+
+[ ]
+import os
+os.listdir()
+
+['.config',
+ 'train.py',
+ 'dataset.csv',
+ 'run_best_model.pth',
+ 'model.py',
+ 'run_encoders.pkl',
+ '__pycache__',
+ 'sample_data']
+
+[ ]
+from google.colab import files
+files.download("run_best_model.pth")
+
+
+
+[ ]
