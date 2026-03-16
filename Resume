@@ -1,0 +1,77 @@
+Abhishree Sinha
+Security Engineer | Identity & Access Management | Security Automation
+Bengaluru-560045, India | 📧 abhishreesinha943@gmail.com | 📞+91 8271066438 | LinkedIn: linkedin.com/in/sinhabhishree
+SUMMARY
+Detail-oriented and security-focused Computer Science engineer with hands-on expertise in Identity and Access Management (IAM), vulnerability assessment, 
+penetration testing, and security automation. Currently serving as an IAM Analyst Intern at MUFG, contributing to enterprise access governance, compliance 
+monitoring, and automation within a global banking environment. Proven ability to identify application vulnerabilities, design machine learning-based security 
+tools, and develop Python-driven security automation systems. Committed to enhancing organizational security posture through innovative solutions and 
+proactive risk management strategies.
+TECHNICAL SKILLS
+ Vulnerability assessment,Threat Analysis
+ Penetration Testing,Incident Response,Risk Assessment
+ Identity Governance,RBAC,Access Certification
+ Privileged Access Monitoring,Identity and Access management
+ Python,SQL,Bash
+ Security compliance auditing,Security policy development
+ Cloud security proficiency,Security architecture design
+ Ethical hacking techniques
+ Data loss prevention techniques
+ Threat intelligence analysis
+ Malware analysis and reverse engineering
+ Digital forensics investigation
+ Team collaboration,Critical thinking
+ Effective multitasking,Attention to detail
+EXPERIENCE
+IAM Analyst Intern
+MUFG – Mitsubishi UFJ Financial Group | Bengaluru
+Nov 2025 – Currently working
+ Optimized IAM workflows for user provisioning, access lifecycle management, and certification review processes to ensure compliance and efficiency 
+by 50%.
+ Performed access governance and entitlement analysis to enforce least-privilege and RBAC policies.
+ Supported GRC compliance and audit preparation by generating automated access review reports.
+ Conducted thorough evaluations of enterprise systems to identify and address privileged access vulnerabilities.
+ Built scripts to streamline security reporting and audit documentation.
+ Collaborated with cross-functional teams to implement strategic initiatives enhancing performance metrics.
+AI Intern
+Power Grid Corporation of India Ltd. | Patna
+Dec 2024 – Jan 2025
+ Developed an AI-driven anomaly detection system to identify irregular operational patterns in infrastructure data(achieving ~85% anomaly 
+detection accuracy)
+ Implemented secure database handling and data protection mechanisms to safeguard sensitive operational datasets.
+ Applied machine learning techniques (SMOTE, PCA) to improve anomaly detection accuracy and reduce false positives.
+ Supported development of a system enabling early detection of operational anomalies and potential security risks.
+Security Researcher (Responsible Disclosure)
+SRM University Faculty Portal
+ Investigated and revealed IDOR vulnerability, ensuring protection of confidential academic documents.
+ Assessed security vulnerabilities related to PII exposure caused by insufficient access controls.
+ Developed and delivered comprehensive vulnerability report to enhance security measures, featuring proof-of-concept and remediation 
+recommendations.
+EDUCATION
+B.Tech – Computer Science Engineering (with specialization in CYBER SECURITY)
+SRM Institute of Science and Technology,Chennai
+Expected Graduation: 2026 (GPA 9/10)
+PROJECTS
+ Phishing URL Detection System, Python, Machine Learning, Threat Intelligence APIs, Built a phishing detection system analyzing URL patterns, 
+domain metadata, and WHOIS information. Integrated threat intelligence APIs to detect malicious domains in real time.
+ Automated Vulnerability Scanning Framework, Developed a Python-based vulnerability scanner integrating NMap and CVE databases. Generated 
+automated CVSS-based risk reports with remediation recommendations.
+ Zero Trust Access Monitoring System, Designed a Zero Trust-inspired access monitoring framework for detecting abnormal login activity. Implemented 
+anomaly detection on authentication logs to identify privilege escalation attempts.
+SECURITY IMPACT
+ Identified and responsibly disclosed critical access control vulnerability (IDOR) in a university portal.
+ Conducted enterprise IAM access reviews and entitlement validation within a banking environment.
+ Built automation scripts to improve security reporting and compliance processes by 50%.
+CERTIFICATIONS
+ Google Cloud Cybersecurity Certificate (2026)
+ Microsoft Cybersecurity Analyst Professional Certificate (2026)
+ Oracle Cloud Infrastructure Networking Professional (2025)
+ Fortinet Certified Fundamentals in Cyber Security (Valid till 2027)
+ Cisco Ethical Hacker – Networking Academy (2025)
+ Oracle AI Vector Search Certified Professional (2025)
+ Oracle MySQL 8.0 Database Developer Professional (2025)
+ Data Privacy Fundamentals – Northeastern University (2025)
+ACHIEVEMENTS
+ Top 10 – Spark India Hackathon
+ Rising Star Award – Women’s Day Recognition
+ Winner – Engineered Expression Competition
